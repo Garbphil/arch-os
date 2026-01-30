@@ -21,7 +21,7 @@ set -E          # ERR trap inherited by shell functions (errtrace)
 : "${GUM:=/usr/local/bin/gum}" # GUM=/usr/bin/gum ./installer.sh
 
 # SCRIPT
-VERSION='1.9.3'
+VERSION='1.9.4'
 
 # VERSION
 [ "$*" = "--version" ] && echo "$VERSION" && exit 0
@@ -127,17 +127,19 @@ main() {
 
         # Open Advanced Properties?
         if [ "$FORCE" = "false" ] && gum_confirm --default=false --negative="Skip" "Open Advanced Setup Editor?"; then
-            local header_txt="• Advanced Setup | Save with CTRL + D or ESC and cancel with CTRL + C"
-            if gum_write --show-line-numbers --prompt "" --height=12 --width=180 --char-limit=0 --header="${header_txt}" --value="$(cat "$SCRIPT_CONFIG")" >"${SCRIPT_CONFIG}.new"; then
+            print_header "Arch OS Installer" # Show landig page
+            gum_title "Advanced Setup Editor"
+            local header_txt="• Save with CTRL + D or ESC and cancel with CTRL + C"
+            if gum_write --show-line-numbers --prompt "" --height=18 --width=180 --char-limit=0 --header="${header_txt}" --value="$(cat "$SCRIPT_CONFIG")" >"${SCRIPT_CONFIG}.new"; then
                 mv "${SCRIPT_CONFIG}.new" "${SCRIPT_CONFIG}" && properties_source
                 gum_info "Properties successfully saved"
                 gum_confirm "Change Password?" && until select_password --change && properties_source; do :; done
-                echo && ! gum_spin --title="Reload Properties in 3 seconds..." -- sleep 3 && trap_gum_exit
-                continue # Restart properties step to refresh properties screen
             else
                 rm -f "${SCRIPT_CONFIG}.new" # Remove tmp properties
                 gum_warn "Advanced Setup canceled"
             fi
+            echo && ! gum_spin --title="Reload Properties in 3 seconds..." -- sleep 3 && trap_gum_exit
+            continue # Restart properties step to refresh properties screen
         fi
 
         # Print success
@@ -1478,8 +1480,8 @@ exec_install_graphics_driver() {
                 ;;
             "amd") # https://wiki.archlinux.org/title/AMDGPU#Installation
                 # Deprecated: libva-mesa-driver lib32-libva-mesa-driver mesa-vdpau lib32-mesa-vdpau
-                local packages=(mesa mesa-utils xf86-video-amdgpu vulkan-radeon vkd3d vulkan-tools)
-                [ "$ARCH_OS_MULTILIB_ENABLED" = "true" ] && packages+=(lib32-mesa lib32-vulkan-radeon lib32-vkd3d)
+                local packages=(mesa mesa-utils xf86-video-amdgpu vulkan-radeon vkd3d vulkan-tools vulkan-mesa-layers opencl-mesa)
+                [ "$ARCH_OS_MULTILIB_ENABLED" = "true" ] && packages+=(lib32-mesa lib32-vulkan-radeon lib32-vkd3d lib32-vulkan-mesa-layers lib32-opencl-mesa)
                 chroot_pacman_install "${packages[@]}"
                 # Must be discussed: https://wiki.archlinux.org/title/AMDGPU#Disable_loading_radeon_completely_at_boot
                 sed -i "s/^MODULES=(.*)/MODULES=(amdgpu)/g" /mnt/etc/mkinitcpio.conf
@@ -1487,8 +1489,8 @@ exec_install_graphics_driver() {
                 ;;
             "ati") # https://wiki.archlinux.org/title/ATI#Installation
                 # Deprecated: libva-mesa-driver lib32-libva-mesa-driver mesa-vdpau lib32-mesa-vdpau
-                local packages=(mesa mesa-utils xf86-video-ati vkd3d vulkan-tools)
-                [ "$ARCH_OS_MULTILIB_ENABLED" = "true" ] && packages+=(lib32-mesa lib32-vkd3d)
+                local packages=(mesa mesa-utils xf86-video-ati vkd3d vulkan-tools vulkan-mesa-layers opencl-mesa)
+                [ "$ARCH_OS_MULTILIB_ENABLED" = "true" ] && packages+=(lib32-mesa lib32-vkd3d lib32-vulkan-mesa-layers lib32-opencl-mesa)
                 chroot_pacman_install "${packages[@]}"
                 sed -i "s/^MODULES=(.*)/MODULES=(radeon)/g" /mnt/etc/mkinitcpio.conf
                 arch-chroot /mnt mkinitcpio -P
@@ -1575,7 +1577,7 @@ exec_install_housekeeping() {
                 echo "--sort rate"
             } >/mnt/etc/xdg/reflector/reflector.conf
             # Enable services
-            arch-chroot /mnt systemctl enable reflector.service    # Rank mirrors after boot (reflector)
+            arch-chroot /mnt systemctl enable reflector.timer      # Rank mirrors weekly (reflector)
             arch-chroot /mnt systemctl enable paccache.timer       # Discard cached/unused packages weekly (pacman-contrib)
             arch-chroot /mnt systemctl enable pkgfile-update.timer # Pkgfile update timer (pkgfile)
             arch-chroot /mnt systemctl enable smartd               # SMART check service (smartmontools)
